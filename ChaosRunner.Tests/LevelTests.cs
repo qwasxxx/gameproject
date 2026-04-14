@@ -82,4 +82,45 @@ public class LevelTests
 
         Assert.True(player.VelocityY < -5f);
     }
+
+    [Fact]
+    public void CreateLevelOne_HasStartFinishPitAndGapFloor()
+    {
+        var level = Level.CreateLevelOne();
+        Assert.True(level.WidthInTiles > 0);
+        Assert.Equal(TileKind.Empty, level.GetTile(level.StartTileX, level.StartTileY));
+        Assert.Equal(TileKind.Empty, level.GetTile(level.FinishTileX, level.FinishTileY));
+        int bottom = level.HeightInTiles - 1;
+        bool hasFloorGap = false;
+        for (int x = 1; x < level.WidthInTiles - 1; x++)
+        {
+            if (level.Tiles[bottom, x] == TileKind.Empty)
+                hasFloorGap = true;
+        }
+
+        Assert.True(hasFloorGap);
+    }
+
+    [Fact]
+    public void PlayerFellOutOfWorld_BelowMapHeight()
+    {
+        var level = Level.CreateWeekOneSample();
+        var player = new Player { Y = level.WorldPixelHeight + 10f };
+        Assert.True(level.PlayerFellOutOfWorld(player));
+    }
+
+    [Fact]
+    public void ResetDynamicState_ClearsFallingBlocks()
+    {
+        var level = Level.CreateLevelOne();
+        level.FallingBlocks.Add(new FallingBlock { X = 0, Y = 0, Width = 10, Height = 10 });
+        level.ResetDynamicState();
+        Assert.Empty(level.FallingBlocks);
+    }
+
+    [Fact]
+    public void PitTile_IsNotSolidTile()
+    {
+        Assert.False(Level.IsSolidTile(TileKind.Pit));
+    }
 }

@@ -2,7 +2,6 @@ using ChaosRunner.Model;
 
 namespace ChaosRunner.Controller;
 
-// клавиатура + таймер; модель трогаю тут, форма только перерисовывается
 public sealed class GameController
 {
     private readonly Level _level;
@@ -61,7 +60,8 @@ public sealed class GameController
                 if (key == Keys.Escape)
                     _gameState.Phase = GamePhase.Playing;
                 break;
-            case GamePhase.GameOver:
+            case GamePhase.Victory:
+            case GamePhase.Defeat:
                 if (key == Keys.Enter)
                     RestartRun();
                 break;
@@ -72,6 +72,7 @@ public sealed class GameController
     {
         _player.Lives = 3;
         _player.ResetVelocity();
+        _level.ResetDynamicState();
         _level.PlacePlayerAtStart(_player);
         _gameState.Phase = GamePhase.Playing;
     }
@@ -85,7 +86,6 @@ public sealed class GameController
             return;
         }
 
-        // иначе W залипает от автоповтора Windows
         bool wNow = _pressedKeys.Contains(Keys.W);
         bool jumpEdge = wNow && !_prevWHeld;
         _prevWHeld = wNow;
@@ -98,8 +98,12 @@ public sealed class GameController
 
         _level.ApplyPlatformTick(_player, horiz, jumpEdge);
 
+        bool crushed = _level.UpdateFallingBlocks(_player);
+
         if (_level.PlayerReachedFinish(_player))
-            _gameState.Phase = GamePhase.GameOver;
+            _gameState.Phase = GamePhase.Victory;
+        else if (crushed || _level.PlayerTouchesSpikes(_player) || _level.PlayerFellOutOfWorld(_player))
+            _gameState.Phase = GamePhase.Defeat;
 
         _requestRedraw();
     }

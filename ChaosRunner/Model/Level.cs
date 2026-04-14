@@ -1,13 +1,26 @@
 namespace ChaosRunner.Model;
 
-// карта + за один тик таймера: гравитация, прыжок, упёрся в блок — откат
 public sealed class Level
 {
     public const float Gravity = 0.62f;
     public const float JumpVelocity = -12.4f;
     public const float MaxFallSpeed = 15f;
+    public const float BlockFallSpeedCap = 18f;
 
-    public Level(TileKind[,] tiles, int tileSize, int startTileX, int startTileY, int finishTileX, int finishTileY)
+    private readonly int[] _fallSpawnTileXs;
+    private readonly int _spawnIntervalTicks;
+    private int _spawnCooldownTicks;
+    private int _spawnColumnIndex;
+
+    public Level(
+        TileKind[,] tiles,
+        int tileSize,
+        int startTileX,
+        int startTileY,
+        int finishTileX,
+        int finishTileY,
+        int[]? fallSpawnTileXs = null,
+        int spawnIntervalTicks = 72)
     {
         Tiles = tiles;
         TileSize = tileSize;
@@ -15,6 +28,10 @@ public sealed class Level
         StartTileY = startTileY;
         FinishTileX = finishTileX;
         FinishTileY = finishTileY;
+        _fallSpawnTileXs = fallSpawnTileXs ?? Array.Empty<int>();
+        _spawnIntervalTicks = spawnIntervalTicks;
+        _spawnCooldownTicks = Math.Min(10, spawnIntervalTicks);
+        FallingBlocks = new List<FallingBlock>();
     }
 
     public TileKind[,] Tiles { get; }
@@ -24,12 +41,17 @@ public sealed class Level
     public int FinishTileX { get; }
     public int FinishTileY { get; }
 
+    public List<FallingBlock> FallingBlocks { get; }
+
     public int WidthInTiles => Tiles.GetLength(1);
     public int HeightInTiles => Tiles.GetLength(0);
 
+    public float WorldPixelHeight => HeightInTiles * TileSize;
+
+    public static bool IsSolidTile(TileKind k) => k == TileKind.Solid;
+
     public TileKind GetTile(int tileX, int tileY)
     {
-        // за краем карты слева/справа/сверху — как стена; под низом пустота (у меня пол цельный)
         if (tileX < 0 || tileX >= WidthInTiles || tileY < 0)
             return TileKind.Solid;
         if (tileY >= HeightInTiles)
@@ -79,7 +101,40 @@ public sealed class Level
                && player.Y + player.Height > fy && player.Y < fy + TileSize;
     }
 
-    public bool IntersectsSolid(Player player)
+    public bool PlayerFellOutOfWorld(Player player) =>
+        player.Y > WorldPixelHeight;
+
+    public bool PlayerTouchesSpikes(Player player)
+    {
+        int floorY = HeightInTiles - 1;
+        int ts = TileSize;
+        float dangerTop = floorY * ts + ts * 0.38f;
+        float dangerBot = (floorY + 1) * ts;
+        float l = player.X;
+        float t = player.Y;
+        float r = player.X + player.Width;
+        float b = player.Y + player.Height;
+
+        for (int tx = 1; tx < WidthInTiles - 1; tx++)
+        {
+            if (Tiles[floorY, tx] != TileKind.Empty)
+                continue;
+            float cl = tx * ts;
+            float cr = cl + ts;
+            if (r <= cl || l >= cr)
+                continue;
+            if (b <= dangerTop || t >= dangerBot)
+                continue;
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool IntersectsSolid(Player player) =>
+        IntersectsTileSolid(player);
+
+    public bool IntersectsTileSolid(Player player)
     {
         float l = player.X;
         float t = player.Y;
@@ -95,12 +150,77 @@ public sealed class Level
         {
             for (int tx = minTx; tx <= maxTx; tx++)
             {
-                if (GetTile(tx, ty) == TileKind.Solid)
+                if (IsSolidTile(GetTile(tx, ty)))
                     return true;
             }
         }
 
         return false;
+    }
+
+    public void ResetDynamicState()
+    {
+        FallingBlocks.Clear();
+        _spawnColumnIndex = 0;
+        _spawnCooldownTicks = Math.Min(10, _spawnIntervalTicks);
+    }
+
+    public bool UpdateFallingBlocks(Player player)
+    {
+        bool crushed = false;
+        if (_fallSpawnTileXs.Length > 0)
+        {
+            _spawnCooldownTicks--;
+            if (_spawnCooldownTicks <= 0)
+            {
+                _spawnCooldownTicks = _spawnIntervalTicks;
+                int tx = _fallSpawnTileXs[_spawnColumnIndex % _fallSpawnTileXs.Length];
+                _spawnColumnIndex++;
+                TrySpawnBlock(tx);
+            }
+        }
+
+        for (int i = FallingBlocks.Count - 1; i >= 0; i--)
+        {
+            var block = FallingBlocks[i];
+            if (block.Y > WorldPixelHeight + TileSize * 2)
+            {
+                FallingBlocks.RemoveAt(i);
+                continue;
+            }
+
+            block.VelocityY += Gravity;
+            if (block.VelocityY > BlockFallSpeedCap)
+                block.VelocityY = BlockFallSpeedCap;
+
+            block.Y += block.VelocityY;
+
+            if (RectsOverlap(player.X, player.Y, player.Width, player.Height, block.X, block.Y, block.Width, block.Height))
+                crushed = true;
+        }
+
+        return crushed;
+    }
+
+    private void TrySpawnBlock(int tileX)
+    {
+        if (tileX < 1 || tileX >= WidthInTiles - 1)
+            return;
+        float w = TileSize * 0.82f;
+        float h = TileSize * 0.72f;
+        float x = tileX * TileSize + (TileSize - w) / 2f;
+        float y = -TileSize - h;
+        if (FallingBlocks.Count >= 8)
+            return;
+
+        FallingBlocks.Add(new FallingBlock
+        {
+            X = x,
+            Y = y,
+            Width = w,
+            Height = h,
+            VelocityY = 2.5f
+        });
     }
 
     private void ResolveHorizontal(Player player, float horizontalInput)
@@ -128,7 +248,9 @@ public sealed class Level
             player.VelocityY = 0;
     }
 
-    // набросок карты из строк, внизу пол; S/F — где старт и финиш (пустые клетки)
+    private static bool RectsOverlap(float ax, float ay, float aw, float ah, float bx, float by, float bw, float bh) =>
+        ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+
     public static Level CreateWeekOneSample()
     {
         const int inner = 26;
@@ -177,5 +299,66 @@ public sealed class Level
             tiles[h - 1, x] = TileKind.Solid;
 
         return new Level(tiles, tileSize: 40, sx, sy, fx, fy);
+    }
+
+    public static Level CreateLevelOne()
+    {
+        const int tileSize = 40;
+        const int iw = 30;
+        const int h = 14;
+        const int w = iw + 2;
+        var tiles = new TileKind[h, w];
+
+        for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            tiles[y, x] = TileKind.Empty;
+
+        for (int x = 0; x < w; x++)
+            tiles[0, x] = TileKind.Solid;
+
+        const int meteorCol = 16;
+        tiles[0, meteorCol] = TileKind.Empty;
+
+        for (int y = 1; y < h; y++)
+        {
+            tiles[y, 0] = TileKind.Solid;
+            tiles[y, w - 1] = TileKind.Solid;
+        }
+
+        int floorY = h - 1;
+
+        for (int x = 1; x < w - 1; x++)
+            tiles[floorY, x] = TileKind.Solid;
+
+        const int pitL = 11;
+        const int pitR = 22;
+        for (int x = pitL; x <= pitR; x++)
+            tiles[floorY, x] = TileKind.Empty;
+
+        void Stone(int tx, int ty)
+        {
+            if (tx == meteorCol)
+                return;
+            tiles[ty, tx] = TileKind.Solid;
+        }
+
+        Stone(9, 12);
+        Stone(11, 11);
+        Stone(13, 10);
+        Stone(15, 11);
+        Stone(17, 10);
+        Stone(19, 11);
+        Stone(21, 10);
+        Stone(23, 12);
+
+        const int sx = 3;
+        const int sy = 12;
+        const int fx = 28;
+        const int fy = 12;
+        tiles[sy, sx] = TileKind.Empty;
+        tiles[sy, fx] = TileKind.Empty;
+
+        int[] spawns = { meteorCol };
+        return new Level(tiles, tileSize, sx, sy, fx, fy, spawns, spawnIntervalTicks: 36);
     }
 }

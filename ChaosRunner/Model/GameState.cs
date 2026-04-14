@@ -5,7 +5,8 @@ public enum GamePhase
     Menu,
     Playing,
     Pause,
-    GameOver
+    Victory,
+    Defeat
 }
 
 // меню / игра / пауза / конец

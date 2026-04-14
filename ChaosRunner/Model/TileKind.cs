@@ -3,5 +3,6 @@ namespace ChaosRunner.Model;
 public enum TileKind
 {
     Empty,
-    Solid
+    Solid,
+    Pit
 }

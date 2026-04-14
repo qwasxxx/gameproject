@@ -20,7 +20,7 @@ internal sealed class GameForm : Form
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
 
-        _level = Level.CreateWeekOneSample();
+        _level = Level.CreateLevelOne();
         _player = new Player();
         _level.PlacePlayerAtStart(_player);
         _gameState = new GameState();
