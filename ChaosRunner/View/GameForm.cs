@@ -8,9 +8,10 @@ internal sealed class GameForm : Form
 {
     private readonly GamePanel _panel = new();
     private readonly GameRenderer _renderer = new();
-    private readonly Level _level;
-    private readonly Player _player;
-    private readonly GameState _gameState;
+    private Level _level;
+    private readonly Player _player = new();
+    private readonly GameState _gameState = new();
+    private readonly HallucinationContext _hallucinationCtx = new();
     private readonly GameController _controller;
 
     public GameForm()
@@ -20,12 +21,14 @@ internal sealed class GameForm : Form
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
 
-        _level = Level.CreateLevelOne();
-        _player = new Player();
-        _level.PlacePlayerAtStart(_player);
-        _gameState = new GameState();
+        _gameState.Phase = GamePhase.Menu;
+        _gameState.MenuLevelIndex = 0;
+        _gameState.CurrentLevelIndex = 0;
 
-        _controller = new GameController(_level, _player, _gameState, RequestRedraw);
+        _level = LevelFactory.Create(0);
+        _level.PlacePlayerAtStart(_player);
+
+        _controller = new GameController(_level, _player, _gameState, RequestRedraw, _hallucinationCtx, LoadLevel);
         _controller.AttachInput(this);
         Shown += (_, _) => Focus();
 
@@ -33,18 +36,29 @@ internal sealed class GameForm : Form
         _panel.Paint += OnPanelPaint;
         Controls.Add(_panel);
 
-        ClientSize = new Size(
-            _level.WidthInTiles * _level.TileSize,
-            _level.HeightInTiles * _level.TileSize);
+        ClientSize = new Size(LevelFactory.ViewportPixelWidth, LevelFactory.ViewportPixelHeight);
 
         _controller.StartGameLoop();
+    }
+
+    private void LoadLevel(int index)
+    {
+        _level = LevelFactory.Create(index);
+        _controller.SetLevel(_level, index);
+        _level.ResetDynamicState();
+        _level.PlacePlayerAtStart(_player);
+        _player.ResetVelocity();
+
+        ClientSize = new Size(LevelFactory.ViewportPixelWidth, LevelFactory.ViewportPixelHeight);
+
+        RequestRedraw();
     }
 
     private void RequestRedraw() => _panel.Invalidate();
 
     private void OnPanelPaint(object? sender, PaintEventArgs e)
     {
-        _renderer.Render(e.Graphics, _level, _player, _gameState);
+        _renderer.Render(e.Graphics, _level, _player, _gameState, _hallucinationCtx);
     }
 
     private sealed class GamePanel : Panel

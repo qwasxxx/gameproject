@@ -123,4 +123,50 @@ public class LevelTests
     {
         Assert.False(Level.IsSolidTile(TileKind.Pit));
     }
+
+    [Fact]
+    public void GhostSolid_BlocksWhenHallucinationOff_PassThroughWhenOn()
+    {
+        var tiles = new TileKind[,]
+        {
+            { TileKind.Empty, TileKind.Empty, TileKind.Empty },
+            { TileKind.Empty, TileKind.GhostSolid, TileKind.Empty },
+            { TileKind.Solid, TileKind.Solid, TileKind.Solid }
+        };
+        var level = new Level(tiles, tileSize: 40, startTileX: 0, startTileY: 0, finishTileX: 2, finishTileY: 0);
+        var player = new Player
+        {
+            X = 40 + 9f,
+            Y = 40 - 20f
+        };
+
+        level.GhostTileHallucinationActive = false;
+        Assert.True(level.IntersectsTileSolid(player));
+
+        level.GhostTileHallucinationActive = true;
+        Assert.False(level.IntersectsTileSolid(player));
+    }
+
+    [Fact]
+    public void DisguisedSolid_FreeWhenHallucinationOff_BlocksWhenOn()
+    {
+        var tiles = new TileKind[,]
+        {
+            { TileKind.Empty, TileKind.Empty, TileKind.Empty },
+            { TileKind.Empty, TileKind.DisguisedSolid, TileKind.Empty },
+            { TileKind.Solid, TileKind.Solid, TileKind.Solid }
+        };
+        var level = new Level(tiles, tileSize: 40, startTileX: 0, startTileY: 0, finishTileX: 2, finishTileY: 0);
+        var player = new Player
+        {
+            X = 40 + 9f,
+            Y = 40 - 20f
+        };
+
+        level.GhostTileHallucinationActive = false;
+        Assert.False(level.IntersectsTileSolid(player));
+
+        level.GhostTileHallucinationActive = true;
+        Assert.True(level.IntersectsTileSolid(player));
+    }
 }

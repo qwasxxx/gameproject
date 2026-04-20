@@ -43,12 +43,39 @@ public sealed class Level
 
     public List<FallingBlock> FallingBlocks { get; }
 
+    /// <summary>Активна ли галлюцинация «призрачных» блоков (меняет коллизию GhostSolid / DisguisedSolid).</summary>
+    public bool GhostTileHallucinationActive { get; set; }
+
     public int WidthInTiles => Tiles.GetLength(1);
     public int HeightInTiles => Tiles.GetLength(0);
 
     public float WorldPixelHeight => HeightInTiles * TileSize;
 
+    /// <summary>Только базовая стена (для тестов и простых проверок).</summary>
     public static bool IsSolidTile(TileKind k) => k == TileKind.Solid;
+
+    /// <summary>Коллизия с учётом режима призрачных блоков.</summary>
+    public bool IsBlockingTile(TileKind k)
+    {
+        if (GhostTileHallucinationActive)
+        {
+            return k switch
+            {
+                TileKind.Solid => true,
+                TileKind.GhostSolid => false,
+                TileKind.DisguisedSolid => true,
+                _ => false
+            };
+        }
+
+        return k switch
+        {
+            TileKind.Solid => true,
+            TileKind.GhostSolid => true,
+            TileKind.DisguisedSolid => false,
+            _ => false
+        };
+    }
 
     public TileKind GetTile(int tileX, int tileY)
     {
@@ -150,7 +177,7 @@ public sealed class Level
         {
             for (int tx = minTx; tx <= maxTx; tx++)
             {
-                if (IsSolidTile(GetTile(tx, ty)))
+                if (IsBlockingTile(GetTile(tx, ty)))
                     return true;
             }
         }
@@ -163,6 +190,7 @@ public sealed class Level
         FallingBlocks.Clear();
         _spawnColumnIndex = 0;
         _spawnCooldownTicks = Math.Min(10, _spawnIntervalTicks);
+        GhostTileHallucinationActive = false;
     }
 
     public bool UpdateFallingBlocks(Player player)
@@ -254,7 +282,8 @@ public sealed class Level
     public static Level CreateWeekOneSample()
     {
         const int inner = 26;
-        string[] inners =
+        const int targetH = 14;
+        string[] playRows =
         {
             new string('.', inner),
             new string('.', inner),
@@ -263,12 +292,18 @@ public sealed class Level
             "S" + new string('.', 14) + "F" + new string('.', 10)
         };
 
+        int padCount = Math.Max(0, targetH - 1 - playRows.Length);
+        var inners = new List<string>(padCount + playRows.Length);
+        for (int i = 0; i < padCount; i++)
+            inners.Add(new string('.', inner));
+        inners.AddRange(playRows);
+
         int w = inner + 2;
-        int h = inners.Length + 1;
+        int h = inners.Count + 1;
         var tiles = new TileKind[h, w];
         int sx = 0, sy = 0, fx = 0, fy = 0;
 
-        for (int y = 0; y < inners.Length; y++)
+        for (int y = 0; y < inners.Count; y++)
         {
             for (int x = 0; x < w; x++)
             {
@@ -350,6 +385,10 @@ public sealed class Level
         Stone(19, 11);
         Stone(21, 10);
         Stone(23, 12);
+
+        tiles[11, 12] = TileKind.GhostSolid;
+        tiles[11, 13] = TileKind.GhostSolid;
+        tiles[10, 11] = TileKind.DisguisedSolid;
 
         const int sx = 3;
         const int sy = 12;
