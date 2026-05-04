@@ -20,9 +20,11 @@ public class GameStateTests // фазы
     }
 
     [Fact]
-    public void Phase_CanBeVictoryOrDefeat()
+    public void ResetRunForNewLevel_ClearsRunCounters()
     {
-        Assert.Equal(GamePhase.Victory, new GameState { Phase = GamePhase.Victory }.Phase);
-        Assert.Equal(GamePhase.Defeat, new GameState { Phase = GamePhase.Defeat }.Phase);
+        var s = new GameState { RunElapsedMs = 999, RunDeaths = 3 };
+        s.ResetRunForNewLevel();
+        Assert.Equal(0, s.RunElapsedMs);
+        Assert.Equal(0, s.RunDeaths);
     }
 }

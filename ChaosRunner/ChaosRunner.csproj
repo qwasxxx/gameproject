@@ -8,4 +8,7 @@
     <RootNamespace>ChaosRunner</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ChaosRunner.Tests" />
+  </ItemGroup>
 </Project>

@@ -1,6 +1,6 @@
 namespace ChaosRunner.Model;
 
-// позиция, скорость по Y, хитбокс; жизни пока не трогаю — заложил на потом
+// Позиция, скорость, хитбокс; Lives сбрасываются при рестарте забега.
 public sealed class Player
 {
     public float X { get; set; }

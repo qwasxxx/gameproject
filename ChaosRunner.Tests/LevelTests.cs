@@ -123,4 +123,58 @@ public class LevelTests
     {
         Assert.False(Level.IsSolidTile(TileKind.Pit));
     }
+
+    [Fact]
+    public void GetTile_OutsideLeftRight_ReturnsSolid()
+    {
+        var tiles = new TileKind[,] { { TileKind.Empty, TileKind.Empty } };
+        var level = new Level(tiles, 40, 0, 0, 1, 0);
+        Assert.Equal(TileKind.Solid, level.GetTile(-1, 0));
+        Assert.Equal(TileKind.Solid, level.GetTile(2, 0));
+    }
+
+    [Fact]
+    public void GetTile_AboveMap_ReturnsSolid_Below_ReturnsEmpty()
+    {
+        var tiles = new TileKind[,] { { TileKind.Empty } };
+        var level = new Level(tiles, 40, 0, 0, 0, 0);
+        Assert.Equal(TileKind.Solid, level.GetTile(0, -1));
+        Assert.Equal(TileKind.Empty, level.GetTile(0, 1));
+    }
+
+    [Fact]
+    public void IsSolidTile_EmptyAndSolid()
+    {
+        Assert.True(Level.IsSolidTile(TileKind.Solid));
+        Assert.False(Level.IsSolidTile(TileKind.Empty));
+    }
+
+    [Fact]
+    public void Create_InvalidId_FallsBackToLevelOne()
+    {
+        var a = Level.Create(1);
+        var b = Level.Create(999);
+        Assert.Equal(a.WidthInTiles, b.WidthInTiles);
+        Assert.Equal(a.HeightInTiles, b.HeightInTiles);
+        Assert.Equal(a.StartTileX, b.StartTileX);
+        Assert.Equal(a.StartTileY, b.StartTileY);
+    }
+
+    [Fact]
+    public void PlayerTouchesSpikes_InPitGap_DetectsDanger()
+    {
+        var tiles = new TileKind[3, 5];
+        for (int y = 0; y < 3; y++)
+        for (int x = 0; x < 5; x++)
+            tiles[y, x] = TileKind.Solid;
+        tiles[2, 1] = TileKind.Empty;
+        tiles[2, 2] = TileKind.Empty;
+        tiles[2, 3] = TileKind.Empty;
+        var level = new Level(tiles, tileSize: 40, 0, 0, 0, 0);
+        float floorY = 2 * 40;
+        float dangerMid = floorY + 40 * 0.38f + 5f;
+        var player = new Player { X = 80f };
+        player.Y = dangerMid - player.Height + 2f;
+        Assert.True(level.PlayerTouchesSpikes(player));
+    }
 }

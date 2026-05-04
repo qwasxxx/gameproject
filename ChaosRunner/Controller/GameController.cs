@@ -40,7 +40,7 @@ public sealed class GameController
         _layoutMenuChrome = layoutMenuChrome;
         _beginLevel = beginLevel;
         _timer = new System.Windows.Forms.Timer { Interval = 16 };
-        _timer.Tick += (_, _) => OnTick();
+        _timer.Tick += (_, _) => AdvanceOneFrame();
         InitHallucinationForLevel();
     }
 
@@ -77,14 +77,18 @@ public sealed class GameController
         host.KeyUp += OnKeyUp;
     }
 
-    private void OnKeyDown(object? sender, KeyEventArgs e)
+    private void OnKeyDown(object? sender, KeyEventArgs e) => SimulateKeyDown(e.KeyCode);
+
+    private void OnKeyUp(object? sender, KeyEventArgs e) => SimulateKeyUp(e.KeyCode);
+
+    internal void SimulateKeyDown(Keys key)
     {
-        _pressedKeys.Add(e.KeyCode);
-        HandleImmediateActions(e.KeyCode);
+        _pressedKeys.Add(key);
+        HandleImmediateActions(key);
         _requestRedraw();
     }
 
-    private void OnKeyUp(object? sender, KeyEventArgs e) => _pressedKeys.Remove(e.KeyCode);
+    internal void SimulateKeyUp(Keys key) => _pressedKeys.Remove(key);
 
     private static string MovementKeyToken(Keys k) =>
         k switch
@@ -124,94 +128,130 @@ public sealed class GameController
 
     private void HandleImmediateActions(Keys key)
     {
-        var s = _gameState;
-        switch (s.Phase)
+        switch (_gameState.Phase)
         {
             case GamePhase.Menu:
-                if (key == Keys.Enter)
-                {
-                    s.Phase = GamePhase.LevelSelect;
-                    s.LevelSelectIndex = 0;
-                    _layoutMenuChrome();
-                }
+                HandleMenuPhase(key);
                 break;
-
             case GamePhase.LevelSelect:
-                if (key == Keys.Escape)
-                {
-                    s.Phase = GamePhase.Menu;
-                    _layoutMenuChrome();
-                }
-                else if (key == Keys.Left)
-                {
-                    s.LevelSelectIndex = (s.LevelSelectIndex + Level.LevelCount - 1) % Level.LevelCount;
-                }
-                else if (key == Keys.Right)
-                {
-                    s.LevelSelectIndex = (s.LevelSelectIndex + 1) % Level.LevelCount;
-                }
-                else if (key == Keys.Enter)
-                {
-                    int id = s.LevelSelectIndex + 1;
-                    if (id <= s.MaxUnlockedLevel)
-                    {
-                        s.CurrentLevelId = id;
-                        s.ResetRunForNewLevel();
-                        _beginLevel(id);
-                        s.Phase = GamePhase.Playing;
-                    }
-                }
-                else if (key >= Keys.D1 && key <= Keys.D5)
-                {
-                    int id = key - Keys.D0;
-                    if (id <= s.MaxUnlockedLevel)
-                    {
-                        s.LevelSelectIndex = id - 1;
-                        s.CurrentLevelId = id;
-                        s.ResetRunForNewLevel();
-                        _beginLevel(id);
-                        s.Phase = GamePhase.Playing;
-                    }
-                }
+                HandleLevelSelectPhase(key);
                 break;
-
             case GamePhase.Playing:
-                if (key == Keys.Escape)
-                    s.Phase = GamePhase.Pause;
-                else if (key == Keys.M)
-                {
-                    s.Phase = GamePhase.LevelSelect;
-                    _layoutMenuChrome();
-                }
+                HandlePlayingPhase(key);
                 break;
-
             case GamePhase.Pause:
-                if (key == Keys.Escape)
-                    s.Phase = GamePhase.Playing;
-                else if (key == Keys.M)
-                {
-                    s.Phase = GamePhase.LevelSelect;
-                    _layoutMenuChrome();
-                }
+                HandlePausePhase(key);
                 break;
-
             case GamePhase.Victory:
-                if (key == Keys.Enter)
-                {
-                    s.Phase = GamePhase.LevelSelect;
-                    _layoutMenuChrome();
-                }
+                HandleVictoryPhase(key);
                 break;
-
             case GamePhase.Defeat:
-                if (key == Keys.Enter)
-                    RestartRunAfterDeath();
-                else if (key == Keys.M)
-                {
-                    s.Phase = GamePhase.LevelSelect;
-                    _layoutMenuChrome();
-                }
+                HandleDefeatPhase(key);
                 break;
+        }
+    }
+
+    private void HandleMenuPhase(Keys key)
+    {
+        if (key != Keys.Enter)
+            return;
+        _gameState.Phase = GamePhase.LevelSelect;
+        _gameState.LevelSelectIndex = 0;
+        _layoutMenuChrome();
+    }
+
+    private void HandleLevelSelectPhase(Keys key)
+    {
+        var s = _gameState;
+        if (key == Keys.Escape)
+        {
+            s.Phase = GamePhase.Menu;
+            _layoutMenuChrome();
+            return;
+        }
+
+        if (key == Keys.Left)
+        {
+            s.LevelSelectIndex = (s.LevelSelectIndex + Level.LevelCount - 1) % Level.LevelCount;
+            return;
+        }
+
+        if (key == Keys.Right)
+        {
+            s.LevelSelectIndex = (s.LevelSelectIndex + 1) % Level.LevelCount;
+            return;
+        }
+
+        if (key == Keys.Enter)
+        {
+            TryBeginSelectedLevel();
+            return;
+        }
+
+        if (key >= Keys.D1 && key <= Keys.D5)
+        {
+            int id = key - Keys.D0;
+            if (id <= s.MaxUnlockedLevel)
+            {
+                s.LevelSelectIndex = id - 1;
+                s.CurrentLevelId = id;
+                s.ResetRunForNewLevel();
+                _beginLevel(id);
+                s.Phase = GamePhase.Playing;
+            }
+        }
+    }
+
+    private void TryBeginSelectedLevel()
+    {
+        var s = _gameState;
+        int id = s.LevelSelectIndex + 1;
+        if (id > s.MaxUnlockedLevel)
+            return;
+        s.CurrentLevelId = id;
+        s.ResetRunForNewLevel();
+        _beginLevel(id);
+        s.Phase = GamePhase.Playing;
+    }
+
+    private void HandlePlayingPhase(Keys key)
+    {
+        if (key == Keys.Escape)
+            _gameState.Phase = GamePhase.Pause;
+        else if (key == Keys.M)
+        {
+            _gameState.Phase = GamePhase.LevelSelect;
+            _layoutMenuChrome();
+        }
+    }
+
+    private void HandlePausePhase(Keys key)
+    {
+        if (key == Keys.Escape)
+            _gameState.Phase = GamePhase.Playing;
+        else if (key == Keys.M)
+        {
+            _gameState.Phase = GamePhase.LevelSelect;
+            _layoutMenuChrome();
+        }
+    }
+
+    private void HandleVictoryPhase(Keys key)
+    {
+        if (key != Keys.Enter)
+            return;
+        _gameState.Phase = GamePhase.LevelSelect;
+        _layoutMenuChrome();
+    }
+
+    private void HandleDefeatPhase(Keys key)
+    {
+        if (key == Keys.Enter)
+            RestartRunAfterDeath();
+        else if (key == Keys.M)
+        {
+            _gameState.Phase = GamePhase.LevelSelect;
+            _layoutMenuChrome();
         }
     }
 
@@ -303,7 +343,7 @@ public sealed class GameController
         }
     }
 
-    private void OnTick()
+    internal void AdvanceOneFrame()
     {
         if (_gameState.Phase == GamePhase.Playing)
             _gameState.RunElapsedMs += _timer.Interval;

@@ -6,11 +6,20 @@ public sealed class ProgressStorage
 {
     private readonly string _path;
 
-    public ProgressStorage()
+    public ProgressStorage(string? customFilePath = null)
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ChaosRunner");
-        Directory.CreateDirectory(dir);
-        _path = Path.Combine(dir, "progress.json");
+        if (customFilePath is { Length: > 0 })
+        {
+            _path = customFilePath;
+            var parent = Path.GetDirectoryName(Path.GetFullPath(_path));
+            if (!string.IsNullOrEmpty(parent))
+                Directory.CreateDirectory(parent);
+            return;
+        }
+
+        var baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ChaosRunner");
+        Directory.CreateDirectory(baseDir);
+        _path = Path.Combine(baseDir, "progress.json");
     }
 
     public GameProgress Load()

@@ -391,63 +391,146 @@ public sealed class GameRenderer
 
     private static void DrawSky(Graphics g, int w, int h)
     {
-        using var brush = new LinearGradientBrush(
-            new Rectangle(0, 0, w, h),
-            Color.FromArgb(255, 100, 175, 235),
-            Color.FromArgb(255, 225, 240, 252),
-            LinearGradientMode.Vertical);
-        g.FillRectangle(brush, 0, 0, w, h);
+        var top = Color.FromArgb(255, 38, 28, 78);
+        var mid = Color.FromArgb(255, 72, 62, 140);
+        var low = Color.FromArgb(255, 140, 92, 168);
+        var horizon = Color.FromArgb(255, 255, 188, 210);
+        using (var brush = new LinearGradientBrush(
+                   new Rectangle(0, 0, w, h), top, horizon, LinearGradientMode.Vertical))
+        {
+            var cb = new ColorBlend(4)
+            {
+                Colors = new[] { top, mid, low, horizon },
+                Positions = new[] { 0f, 0.38f, 0.72f, 1f }
+            };
+            brush.InterpolationColors = cb;
+            g.FillRectangle(brush, 0, 0, w, h);
+        }
 
-        using var glow = new SolidBrush(Color.FromArgb(25, 255, 255, 255));
-        g.FillEllipse(glow, w * 0.55f, -h * 0.08f, w * 0.55f, h * 0.35f);
+        using (var diskPath = new GraphicsPath())
+        {
+            diskPath.AddEllipse(w * 0.5f, -h * 0.06f, w * 0.55f, h * 0.42f);
+            var bounds = diskPath.GetBounds();
+            using var moon = new LinearGradientBrush(bounds, Color.FromArgb(55, 255, 255, 255),
+                Color.FromArgb(0, 255, 200, 255), LinearGradientMode.ForwardDiagonal);
+            g.FillPath(moon, diskPath);
+        }
+
+        using var star = new SolidBrush(Color.FromArgb(200, 255, 255, 255));
+        var rng = new Random(7);
+        for (int i = 0; i < 48; i++)
+            g.FillEllipse(star, rng.Next(Math.Max(1, w)), rng.Next(Math.Max(1, h * 3 / 4)),
+                rng.Next(1, 3), rng.Next(1, 3));
     }
 
     private static void DrawClouds(Graphics g, int w, int h)
     {
-        using var b = new SolidBrush(Color.FromArgb(55, 255, 255, 255));
-        void Cloud(float x, float y, float s)
+        void Cloud(float x, float y, float s, int alpha)
         {
-            g.FillEllipse(b, x, y, s * 1.2f, s * 0.55f);
-            g.FillEllipse(b, x + s * 0.35f, y - s * 0.08f, s, s * 0.5f);
-            g.FillEllipse(b, x + s * 0.85f, y, s * 0.9f, s * 0.5f);
+            using var a = new SolidBrush(Color.FromArgb(alpha, 255, 255, 255));
+            using var b = new SolidBrush(Color.FromArgb(alpha / 2, 255, 255, 255));
+            g.FillEllipse(a, x, y, s * 1.25f, s * 0.52f);
+            g.FillEllipse(a, x + s * 0.32f, y - s * 0.06f, s * 0.95f, s * 0.48f);
+            g.FillEllipse(b, x + s * 0.78f, y + s * 0.02f, s * 0.85f, s * 0.45f);
         }
 
-        Cloud(w * 0.08f, h * 0.12f, w * 0.12f);
-        Cloud(w * 0.42f, h * 0.08f, w * 0.1f);
-        Cloud(w * 0.72f, h * 0.15f, w * 0.11f);
+        Cloud(w * 0.06f, h * 0.14f, w * 0.13f, 38);
+        Cloud(w * 0.40f, h * 0.08f, w * 0.11f, 32);
+        Cloud(w * 0.68f, h * 0.16f, w * 0.12f, 34);
     }
 
     private static void DrawGroundOrCeilingTile(Graphics g, Rectangle rect, bool ceiling)
     {
-        var dark = ceiling ? Color.FromArgb(62, 55, 70) : Color.FromArgb(38, 92, 52);
-        var light = ceiling ? Color.FromArgb(155, 148, 172) : Color.FromArgb(118, 198, 108);
+        if (ceiling)
+            DrawStoneCeilingStrip(g, rect);
+        else
+            DrawStoneFloorStrip(g, rect);
+    }
 
-        float ang = ceiling ? 38f : 28f;
-        using (var brush = new LinearGradientBrush(rect, light, dark, ang))
-            g.FillRectangle(brush, rect);
+    private static void DrawStoneFloorStrip(Graphics g, Rectangle rect)
+    {
+        if (rect.Width < 2 || rect.Height < 2)
+            return;
 
-        int t = Math.Max(5, rect.Height / 4);
-        using var topStrip = new SolidBrush(ceiling ? Color.FromArgb(175, 168, 188) : Color.FromArgb(132, 218, 118));
-        g.FillRectangle(topStrip, rect.X, rect.Y, rect.Width, t);
+        Color cTop = Color.FromArgb(255, 110, 168, 138);
+        Color cBot = Color.FromArgb(255, 32, 62, 52);
 
-        if (!ceiling)
+        using (var br = new LinearGradientBrush(rect, cTop, cBot, LinearGradientMode.Vertical))
+            g.FillRectangle(br, rect);
+
+        int h = rect.Height;
+        int course = Math.Clamp(Math.Max(10, h / 4), 1, h);
+        using var seam = new Pen(Color.FromArgb(55, 12, 32, 28), 1f);
+        for (int y = rect.Top + course; y < rect.Bottom - 2; y += course)
+            g.DrawLine(seam, rect.Left, y, rect.Right, y);
+
+        int colW = Math.Max(18, course + 6);
+        uint seed = unchecked((uint)(((long)rect.X * 73856093) ^ ((long)rect.Y * 83492791)));
+        for (int x = rect.Left + colW + (int)(seed % 11); x < rect.Right - 2; x += colW)
         {
-            using var mortar = new Pen(Color.FromArgb(90, 30, 65, 38), 1.1f);
-            int step = Math.Max(14, rect.Width / 5);
-            for (int bx = rect.X + step; bx < rect.Right - 4; bx += step)
-                g.DrawLine(mortar, bx, rect.Y + t, bx, rect.Bottom - 1);
-            using var blade = new Pen(Color.FromArgb(50, 45, 130, 58), 1f);
-            for (int i = 9; i < rect.Width - 6; i += 16)
+            float jitter = ((int)(seed >> 8) & 7) - 3;
+            float x0 = x + jitter;
+            g.DrawLine(seam, x0, rect.Top + 2, x0, rect.Bottom - 2);
+            seed = seed * 1103515245 + 12345;
+        }
+
+        using (var noise = new Pen(Color.FromArgb(28, 255, 255, 255), 1f))
+        {
+            int step = Math.Max(14, rect.Width / 12);
+            int bot = rect.Bottom - 5;
+            int topN = rect.Top + 4;
+            if (bot > topN)
             {
-                int bx = rect.X + i;
-                g.DrawLine(blade, bx, rect.Y + t + 1, bx + 3, rect.Y + t - 2);
+                for (int x = rect.Left + 3; x < rect.Right; x += step)
+                {
+                    float n = ((x + rect.Y * 7) % 5) * 0.4f;
+                    g.DrawLine(noise, x + n, topN, x - n + 2, bot);
+                }
             }
         }
 
-        using var rim = new Pen(Color.FromArgb(200, 255, 255, 255), 1.2f);
-        g.DrawLine(rim, rect.X, rect.Y + t, rect.Right, rect.Y + t);
-        using var foot = new Pen(Color.FromArgb(55, 0, 0, 0), 1f);
+        int lip = Math.Max(4, rect.Height / 6);
+        using var lipHi = new LinearGradientBrush(
+            new Rectangle(rect.X, rect.Y, rect.Width, lip), Color.FromArgb(220, 210, 255, 230), Color.FromArgb(40, 90, 140, 110), 90f);
+        g.FillRectangle(lipHi, rect.X, rect.Y, rect.Width, lip);
+
+        using var rim = new Pen(Color.FromArgb(200, 240, 255, 245), 1.6f);
+        g.DrawLine(rim, rect.X, rect.Y + 1, rect.Right, rect.Y + 1);
+
+        using var foot = new Pen(Color.FromArgb(160, 8, 16, 18), 1.2f);
         g.DrawLine(foot, rect.X, rect.Bottom - 1, rect.Right, rect.Bottom - 1);
+        using var innerSh = new SolidBrush(Color.FromArgb(45, 0, 0, 0));
+        g.FillRectangle(innerSh, rect.X, (int)(rect.Bottom - rect.Height * 0.12f), rect.Width,
+            (int)(rect.Height * 0.12f) + 1);
+    }
+
+    private static void DrawStoneCeilingStrip(Graphics g, Rectangle rect)
+    {
+        Color cNear = Color.FromArgb(255, 98, 102, 132);
+        Color cFar = Color.FromArgb(255, 28, 30, 48);
+
+        using (var br = new LinearGradientBrush(rect, cFar, cNear, LinearGradientMode.Vertical))
+            g.FillRectangle(br, rect);
+
+        int bh = Math.Max(8, rect.Height / 5);
+        using var mortar = new Pen(Color.FromArgb(90, 10, 12, 22), 1f);
+        int row = 0;
+        for (int y = rect.Top; y < rect.Bottom; y += bh, row++)
+        {
+            float shift = row % 2 == 0 ? 0 : bh * 0.6f;
+            for (float x = rect.Left - shift; x < rect.Right; x += bh * 1.7f)
+            {
+                float bw = bh * 1.55f;
+                g.DrawRectangle(mortar, x, y, bw, Math.Min(bh, rect.Bottom - y) - 1);
+            }
+        }
+
+        int lip = Math.Max(3, rect.Height / 5);
+        using var under = new SolidBrush(Color.FromArgb(55, 0, 0, 0));
+        g.FillRectangle(under, rect.X, rect.Bottom - lip, rect.Width, lip);
+
+        using var seamLight = new Pen(Color.FromArgb(140, 70, 85, 110), 1.2f);
+        g.DrawLine(seamLight, rect.X, rect.Bottom - 2, rect.Right, rect.Bottom - 2);
     }
 
     private static void DrawFloorSpikes(Graphics g, Level level, int ts)
@@ -460,92 +543,194 @@ public sealed class GameRenderer
 
             float x0 = tx * ts;
             float y0 = floor * ts;
-            int n = 5;
-            float step = (ts - 8f) / n;
+            int n = 6;
+            float margin = 5f;
+            float width = ts - margin * 2;
+            float step = width / n;
             for (int i = 0; i < n; i++)
             {
-                float lx = x0 + 4 + i * step;
+                float lx = x0 + margin + i * step;
+                float tipX = lx + step * 0.5f;
+                float tipY = y0 + ts * 0.18f;
+                float baseL = lx + step * 0.08f;
+                float baseR = lx + step * 0.92f;
+                float baseY = y0 + ts - 1.5f;
                 var spike = new[]
                 {
-                    new PointF(lx + step * 0.5f, y0 + 4),
-                    new PointF(lx, y0 + ts - 2),
-                    new PointF(lx + step, y0 + ts - 2)
+                    new PointF(tipX, tipY),
+                    new PointF(baseL, baseY),
+                    new PointF(baseR, baseY)
                 };
-                using var fill = new SolidBrush(Color.FromArgb(255, 190, 55, 55));
-                using var edge = new Pen(Color.FromArgb(255, 120, 20, 20), 1.4f);
-                g.FillPolygon(fill, spike);
+
+                using (var fill = new LinearGradientBrush(
+                           new PointF(tipX, tipY), new PointF(tipX, baseY),
+                           Color.FromArgb(255, 255, 150, 160),
+                           Color.FromArgb(255, 110, 28, 42)))
+                    g.FillPolygon(fill, spike);
+
+                using var edge = new Pen(Color.FromArgb(235, 60, 12, 28), 1.3f);
                 g.DrawPolygon(edge, spike);
+                using var spec = new Pen(Color.FromArgb(200, 255, 255, 255), 1f);
+                g.DrawLine(spec, tipX - step * 0.15f, tipY + step * 0.35f, tipX - step * 0.02f, baseY - step * 0.25f);
             }
         }
     }
 
     private static void DrawStartMarker(Graphics g, Rectangle rect)
     {
-        int cx = rect.X + rect.Width / 2;
-        int cy = rect.Y + rect.Height / 2;
-        using var glow = new SolidBrush(Color.FromArgb(90, 100, 180, 255));
-        g.FillEllipse(glow, cx - 14, cy - 14, 28, 28);
-        using var core = new SolidBrush(Color.FromArgb(90, 150, 255));
-        g.FillEllipse(core, cx - 10, cy - 10, 20, 20);
-        using var hi = new SolidBrush(Color.FromArgb(200, 230, 255));
-        g.FillEllipse(hi, cx - 5, cy - 7, 8, 6);
+        float cx = rect.X + rect.Width / 2f;
+        float cy = rect.Y + rect.Height / 2f;
+        float r = Math.Min(rect.Width, rect.Height) * 0.38f;
+
+        for (int i = 3; i >= 1; i--)
+        {
+            float rad = r + i * 5f;
+            int a = 35 - i * 8;
+            using var ring = new SolidBrush(Color.FromArgb(a, 80, 200, 255));
+            g.FillEllipse(ring, cx - rad, cy - rad, rad * 2, rad * 2);
+        }
+
+        var coreRect = new RectangleF(cx - r, cy - r, r * 2, r * 2);
+        using (var coreBr = new LinearGradientBrush(coreRect,
+                   Color.FromArgb(255, 220, 255, 255), Color.FromArgb(255, 50, 120, 240), 42f))
+            g.FillEllipse(coreBr, coreRect);
+
+        using var rim = new Pen(Color.FromArgb(230, 255, 255, 255), 1.8f);
+        g.DrawEllipse(rim, cx - r + 1, cy - r + 1, r * 2 - 2, r * 2 - 2);
     }
 
     private static void DrawFinishFlag(Graphics g, Rectangle rect)
     {
-        int px = rect.X + rect.Width / 4;
-        int py = rect.Y + rect.Height / 6;
-        int ph = rect.Height * 2 / 3;
-        using var pole = new Pen(Color.FromArgb(220, 220, 230), 3f) { EndCap = LineCap.Round };
-        g.DrawLine(pole, px, py, px, py + ph);
+        float px = rect.X + rect.Width * 0.28f;
+        float py = rect.Y + rect.Height * 0.18f;
+        float ph = rect.Height * 0.68f;
 
-        var flag = new Point[]
+        using var poleSh = new Pen(Color.FromArgb(90, 0, 0, 0), 5f) { EndCap = LineCap.Round };
+        g.DrawLine(poleSh, px + 1.5f, py + 1.5f, px + 1.5f, py + ph + 1.5f);
+        using var pole = new LinearGradientBrush(new RectangleF(px - 2, py, 5, ph),
+            Color.FromArgb(255, 180, 185, 200), Color.FromArgb(255, 85, 88, 102), 0f);
+        g.FillRectangle(pole, px - 2f, py, 5f, ph);
+        using var poleEdge = new Pen(Color.FromArgb(200, 255, 255, 255), 1f);
+        g.DrawLine(poleEdge, px - 1.5f, py, px - 1.5f, py + ph);
+
+        float fx0 = px + 4f;
+        float fy0 = py + 2f;
+        var flag = new PointF[]
         {
-            new(px + 2, py + 2),
-            new(px + rect.Width * 2 / 3, py + rect.Height / 5),
-            new(px + 2, py + rect.Height / 2)
+            new(fx0, fy0),
+            new(fx0 + rect.Width * 0.55f, fy0 + rect.Height * 0.2f),
+            new(fx0, fy0 + rect.Height * 0.42f)
         };
-        using var fb = new LinearGradientBrush(new Rectangle(rect.X, rect.Y, rect.Width, rect.Height),
-            Color.FromArgb(90, 240, 90), Color.FromArgb(220, 60, 200), 25f);
-        g.FillPolygon(fb, flag);
-        using var fp = new Pen(Color.FromArgb(180, 40, 120), 1.2f);
+        using (var fb = new PathGradientBrush(new[]
+               {
+                   flag[0], flag[1], flag[2]
+               }))
+        {
+            fb.CenterColor = Color.FromArgb(255, 255, 255, 200);
+            fb.SurroundColors = new[]
+            {
+                Color.FromArgb(255, 255, 220, 90),
+                Color.FromArgb(255, 255, 90, 140),
+                Color.FromArgb(255, 120, 220, 255)
+            };
+            g.FillPolygon(fb, flag);
+        }
+
+        using var fp = new Pen(Color.FromArgb(220, 255, 255, 255), 1.4f);
         g.DrawPolygon(fp, flag);
+        using var fold = new Pen(Color.FromArgb(100, 255, 255, 255), 1f);
+        g.DrawLine(fold, fx0 + 3, fy0 + 8, fx0 + rect.Width * 0.38f, fy0 + rect.Height * 0.18f);
     }
+
+    private static int VariationHash(FallingBlock block) =>
+        unchecked(((int)(block.X * 1007f)) * 73856093 ^ ((int)(block.Y * 7919f)) * 19349663);
 
     private static void DrawFallingBlock(Graphics g, FallingBlock block)
     {
         var r = new RectangleF(block.X, block.Y, block.Width, block.Height);
-        float inset = 3f;
-        using (var baseFill = new LinearGradientBrush(r,
-                   Color.FromArgb(255, 140, 130, 125), Color.FromArgb(255, 72, 68, 78), LinearGradientMode.ForwardDiagonal))
-            g.FillRectangle(baseFill, r);
-
-        var face = new RectangleF(r.X + inset, r.Y + inset, r.Width - inset * 2, r.Height - inset * 2);
-        using (var faceBr = new LinearGradientBrush(face,
-                   Color.FromArgb(255, 210, 95, 55), Color.FromArgb(255, 145, 55, 35), LinearGradientMode.Vertical))
-            g.FillRectangle(faceBr, face);
-
-        using var crack = new Pen(Color.FromArgb(160, 55, 35, 28), 1.2f);
-        g.DrawLine(crack, face.Left + 4, face.Top + 6, face.Left + face.Width * 0.45f, face.Bottom - 5);
-        using var edge = new Pen(Color.FromArgb(230, 40, 25, 22), 2f);
-        g.DrawRectangle(edge, r.X, r.Y, r.Width, r.Height);
-        using var hi = new Pen(Color.FromArgb(180, 255, 250, 220), 1.6f);
-        g.DrawLine(hi, face.X + 4, face.Y + 4, face.Right - 5, face.Y + 4);
-        using var shade = new Pen(Color.FromArgb(100, 0, 0, 0), 1f);
-        g.DrawLine(shade, face.Right - 3, face.Y + 6, face.Right - 3, face.Bottom - 4);
-
-        using var warn = new SolidBrush(Color.FromArgb(230, 255, 60, 70));
         float cx = r.X + r.Width / 2f;
-        float ty = r.Y - 2;
-        g.FillPolygon(warn, new[]
+        float cy = r.Y + r.Height / 2f;
+        int v = VariationHash(block);
+        float rnd(float scale) => ((v = unchecked(v * 1103515245 + 12345)) & 0xFFFF) / 65535f * scale;
+
+        float tail = Math.Min(r.Height * 1.25f, 8f + block.VelocityY * 1.65f);
+        using (var tailPath = new GraphicsPath())
         {
-            new PointF(cx - 9, ty + 13),
-            new PointF(cx, ty),
-            new PointF(cx + 9, ty + 13)
-        });
-        using var ex = new Pen(Color.FromArgb(240, 120, 15, 15), 2f);
-        g.DrawLine(ex, cx - 3, ty + 4, cx + 3, ty + 10);
-        g.DrawLine(ex, cx + 3, ty + 4, cx - 3, ty + 10);
+            float hw = r.Width * 0.35f;
+            tailPath.AddPolygon(new[]
+            {
+                new PointF(cx - hw, r.Y),
+                new PointF(cx + hw, r.Y),
+                new PointF(cx + hw * 0.2f, r.Y - tail),
+                new PointF(cx - hw * 0.15f, r.Y - tail * 0.92f)
+            });
+            using var tb = new PathGradientBrush(tailPath);
+            tb.CenterColor = Color.FromArgb(210, 255, 220, 120);
+            var edge = Color.FromArgb(0, 255, 90, 40);
+            tb.SurroundColors = new[] { edge, edge, edge, edge };
+            tb.CenterPoint = new PointF(cx, r.Y - tail * 0.4f);
+            g.FillPath(tb, tailPath);
+        }
+
+        float ring = Math.Max(r.Width, r.Height) * 0.55f;
+        for (int i = 3; i >= 1; i--)
+        {
+            float rx = ring * (0.55f + i * 0.18f);
+            float ry = ring * (0.45f + i * 0.14f);
+            int a = 28 - i * 7;
+            using var hb = new SolidBrush(Color.FromArgb(a, 255, 120, 70));
+            g.FillEllipse(hb, cx - rx, cy - ry * 0.85f, rx * 2, ry * 1.55f);
+        }
+
+        float corner = Math.Min(r.Width, r.Height) * 0.22f;
+        using var bodyPath = RoundedRect(r, corner);
+        using (var shell = new LinearGradientBrush(r,
+                   Color.FromArgb(255, 45, 28, 32),
+                   Color.FromArgb(255, 120, 48, 38),
+                   rnd(40f) + 52f))
+            g.FillPath(shell, bodyPath);
+
+        using (var glaze = new LinearGradientBrush(
+                   new RectangleF(r.X, r.Y, r.Width, r.Height * 0.55f),
+                   Color.FromArgb(120, 255, 200, 140),
+                   Color.FromArgb(30, 255, 100, 50),
+                   LinearGradientMode.Vertical))
+        {
+            g.SetClip(bodyPath);
+            g.FillRectangle(glaze, r.X, r.Y, r.Width, r.Height * 0.55f);
+            g.ResetClip();
+        }
+
+        float cr = r.Width * 0.18f;
+        var magma = new RectangleF(cx - cr, cy - cr * 0.2f, cr * 2, cr * 1.4f);
+        using (var corb = new LinearGradientBrush(magma, Color.FromArgb(255, 255, 255, 230),
+                   Color.FromArgb(255, 255, 140, 60), LinearGradientMode.Vertical))
+        {
+            g.SetClip(bodyPath);
+            g.FillEllipse(corb, magma);
+            g.ResetClip();
+        }
+
+        using var crackGlow = new Pen(Color.FromArgb(240, 255, 230, 160), 2f);
+        using var crackDark = new Pen(Color.FromArgb(160, 60, 28, 20), 1.2f);
+        float j = rnd(4f);
+        g.DrawLine(crackDark, r.Left + 4 + j, r.Top + 5, cx - 2, cy + 3);
+        g.DrawLine(crackGlow, r.Left + 4 + j, r.Top + 5, cx - 2, cy + 3);
+        g.DrawLine(crackDark, r.Right - 5 - j, r.Top + 7, cx + 3, cy + 5);
+        g.DrawLine(crackGlow, r.Right - 5 - j, r.Top + 7, cx + 3, cy + 5);
+        g.DrawLine(crackDark, cx - 1, cy - 2, cx + rnd(3f), r.Bottom - 4);
+        g.DrawLine(crackGlow, cx - 1, cy - 2, cx + rnd(3f), r.Bottom - 4);
+
+        using var crust = new Pen(Color.FromArgb(230, 35, 20, 18), 1.8f);
+        g.DrawPath(crust, bodyPath);
+        using var hi = new Pen(Color.FromArgb(130, 255, 255, 255), 1.2f);
+        g.DrawArc(hi, r.X + 3, r.Y + 3, r.Width * 0.55f, r.Height * 0.45f, 180, 90);
+
+        float px = cx + r.Width * 0.05f;
+        float pyTip = r.Y - tail - 4f;
+        using var spark = new SolidBrush(Color.FromArgb(230, 255, 255, 255));
+        g.FillEllipse(spark, px, pyTip, 4f, 4f);
+        g.FillEllipse(spark, px - 6f, pyTip + 3f, 3f, 3f);
     }
 
     private static void DrawPlayer(Graphics g, Player player)
