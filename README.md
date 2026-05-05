@@ -8,25 +8,15 @@
 
 ## Как у меня разложено по папкам
 
-Пока делаю только **неделю 1** из таблицы ниже.
-
 - `ChaosRunner.sln` — решение
 - `ChaosRunner/` — WinForms, .NET 8
-- `Model/` — `Player`, `Level`, `GameState` (и enum фаз в том же файле). Без WinForms
-- `View/` — `GameForm`, `GameRenderer`, весь рисунок через GDI+
-- `Controller/` — `GameController`, клавиатура и `Timer`
-- `ChaosRunner.Tests/` — немного тестов на модель
+  - `ChaosRunner/Model/` — `Player`, `Level`, `GameState` `GamePhase`, `GameProgress`, `ProgressStorage`, `FallingBlock`, `KeyRemapSpec`, `TileKind`.
+  - `ChaosRunner/View/` — `GameForm`, `GameRenderer` 
+  - `ChaosRunner/Controller/` — `GameController`
 
-Запуск из корня: `dotnet run --project ChaosRunner/ChaosRunner.csproj`  
-Тесты: `dotnet test`
+`ChaosRunner.Tests/` — `GameController`, `ProgressStorage`, `KeyRemapSpec`, `GameRenderer` 
 
-**Про `Level.cs`:** в неделе 1 в плане прямо есть пункт «`Level` (карта, старт/финиш)» — то есть класс уровня и какая-то карта на этой неделе **нужны**. А строка **«Первый уровень»** во второй неделе — это уже про полноценный уровень с препятствиями, ямами и падением блоков, не про сам факт наличия файла `Level`.
 
-Управление: платформер сбоку, **A/D**, **W** — прыжок. В плане написано WASD — я под свою схему оставил так.
-
-Про объём кода: строк много не потому что «неделя 1 = полигон», а потому что **MVC режут на несколько файлов**, плюс **коллизии и разбор карты** в `Level` занимают место, плюс **тесты** — это отдельная пачка строк. Если убрать тесты и нарисовать игрока кружком вместо сложной фигуры, цифра падает сильно (я так и упростил отрисовку).
-
----
 
 ## Неделя 1 — Архитектура и основа
 
@@ -57,12 +47,16 @@
 
 Ключевая и самая творческая часть игры — механики, сбивающие игрока с толку.
 
+**По плану курса:**
+
 - Создать интерфейс `IHallucination` с методами `Apply()` и `Revert()` — каждая галлюцинация как отдельный класс.
 - **Перестановка клавиш** (`KeySwapHallucination`): `W→D`, `A→S` и т.п., хранить маппинг в Controller.
 - **Инверсия управления** (`InvertHallucination`): все направления зеркально.
 - **«Призрачные» блоки** (`GhostBlockHallucination`): некоторые блоки выглядят твёрдыми, но сквозные — и наоборот.
 - **Тряска экрана** (`ShakeHallucination`): смещение отрисовки в View на случайный офсет.
 - Настроить активацию галлюцинаций по таймеру или при входе в зону уровня.
+
+**В текущей реализации (без отдельного интерфейса):** перестановка **A/W/D** и смена каждые 10 с — `KeyRemapSpec` (Model) + логика в `GameController`; тряска — смещение `GameState.ShakeOffsetX/Y` при отрисовке; на поздних уровнях — задержка ввода (`Level.InputLagMilliseconds`). «Призрачные» блоки и инверсия осей в коде не сделаны.
 
 ---
 
@@ -89,10 +83,14 @@
 
 ---
 
-## Структура классов (краткая)
+## Структура классов 
 
-| Слой       | Классы                                                                 |
-|-----------|-------------------------------------------------------------------------|
-| **Model** | `Player`, `Level`, `Tile`, `FallingBlock`, `GameState`, `IHallucination` + реализации |
-| **View**  | `GameForm`, `GameRenderer`, `MenuPanel`, `HUDPanel`                     |
-| **Controller** | `GameController`, `InputHandler`, `LevelManager`, `HallucinationManager` |
+| Слой | Классы / типы |
+|------|----------------|
+| **Model** | `Player`, `Level`, `TileKind`, `FallingBlock`, `GameState`, `GamePhase`, `GameProgress`, `ProgressStorage`, `KeyRemapSpec` |
+| **View** | `GameForm`, `GameRenderer` |
+| **Controller** | `GameController` |
+
+Точка входа: `Program.cs` → `GameForm`.
+
+Ниже по файлу — пошаговый **план на 5 недель** курса; не каждый пункт плана вынесен в отдельный класс с тем именем, что в методичке.
